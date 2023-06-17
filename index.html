@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Custom Watermark Generator</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f5f5f5;
+      margin: 0;
+      padding: 20px;
+    }
+
+    h1 {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      background-color: #fff;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 0 8px rgba(0, 0, 0, 0.1);
+    }
+
+    label {
+      display: block;
+      margin-bottom: 5px;
+    }
+
+    input[type="file"] {
+      margin-bottom: 10px;
+    }
+
+    .preview-container {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+
+    .preview-image {
+      max-width: 100%;
+      height: auto;
+      border-radius: 8px;
+      box-shadow: 0 0 8px rgba(0, 0, 0, 0.2);
+    }
+
+    .button-container {
+      text-align: center;
+    }
+
+    .generate-btn {
+      padding: 10px 20px;
+      font-size: 16px;
+      background-color: #007bff;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    .download-link {
+      display: none;
+      margin-top: 10px;
+    }
+  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.7.1/jszip.min.js"></script>
+</head>
+<body>
+  <h1>Custom Watermark Generator</h1>
+
+  <div class="container">
+    <label for="image-upload">Upload Images:</label>
+    <input type="file" id="image-upload" accept="image/*" multiple />
+
+    <label for="text-input">Watermark Text:</label>
+    <input type="text" id="text-input" />
+
+    <label for="watermark-upload">Watermark Image:</label>
+    <input type="file" id="watermark-upload" accept="image/*" />
+
+    <label for="width-input">Image Width:</label>
+    <input type="number" id="width-input" />
+
+    <label for="height-input">Image Height:</label>
+    <input type="number" id="height-input" />
+
+    <div class="button-container">
+      <button class="generate-btn" id="generate-btn">Generate Watermark</button>
+      <br />
+      <a class="download-link" id="download-link" download="watermarked_images.zip">Download Watermarked Images</a>
+    </div>
+
+    <div class="preview-container">
+      <h2>Preview:</h2>
+      <div id="preview"></div>
+    </div>
+  </div>
+
+  <script>
+    // Function to handle image upload
+    function handleImageUpload(e) {
+      var files = e.target.files;
+      var preview = document.getElementById("preview");
+      preview.innerHTML = "";
+
+      for (var i = 0; i < files.length; i++) {
+        var reader = new FileReader();
+        reader.onload = function (event) {
+          var img = new Image();
+          img.classList.add("preview-image");
+          img.onload = function () {
+            preview.appendChild(img);
+          };
+          img.src = event.target.result;
+        };
+        reader.readAsDataURL(files[i]);
+      }
+    }
+
+    // Function to handle watermark image upload
+    function handleWatermarkUpload(e) {
+      var reader = new FileReader();
+      reader.onload = function (event) {
+        var watermarkImg = new Image();
+        watermarkImg.classList.add("preview-image");
+        watermarkImg.onload = function () {
+          // Update the preview with the watermark image
+          var preview = document.getElementById("preview");
+          preview.innerHTML = "";
+          preview.appendChild(watermarkImg);
+        };
+        watermarkImg.src = event.target.result;
+      };
+      reader.readAsDataURL(e.target.files[0]);
+    }
+
+    // Function to handle watermark generation
+    function generateWatermark() {
+      var watermarkText = document.getElementById("text-input").value;
+      var watermarkImg = document.getElementById("preview").querySelector("img");
+      var resizeWidth = document.getElementById("width-input").value;
+      var resizeHeight = document.getElementById("height-input").value;
+
+      var images = document.getElementById("image-upload").files;
+      var zip = new JSZip();
+      var zipFileCount = 0;
+
+      for (var i = 0; i < images.length; i++) {
+        var reader = new FileReader();
+        reader.onload = (function (file) {
+          return function (e) {
+            var img = new Image();
+            img.onload = function () {
+              var canvas = document.createElement("canvas");
+              var context = canvas.getContext("2d");
+
+              // Set canvas dimensions
+              canvas.width = resizeWidth || img.width;
+              canvas.height = resizeHeight || (img.height / img.width) * canvas.width;
+
+              // Draw the image on the canvas
+              context.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+              // Check if watermark text or image is provided
+              if (watermarkText !== "") {
+                // Add watermark text
+                context.font = "bold 36px Arial";
+                context.fillStyle = "rgba(255, 255, 255, 0.5)";
+                context.fillText(watermarkText, 20, canvas.height - 20);
+              } else if (watermarkImg) {
+                // Add watermark image
+                var watermarkWidth = canvas.width / 3;
+                var watermarkHeight = (watermarkImg.height / watermarkImg.width) * watermarkWidth;
+                context.drawImage(
+                  watermarkImg,
+                  canvas.width - watermarkWidth - 20,
+                  canvas.height - watermarkHeight - 20,
+                  watermarkWidth,
+                  watermarkHeight
+                );
+              }
+
+              // Convert the canvas to a data URL
+              var dataURL = canvas.toDataURL("image/png");
+
+              // Add the watermarked image to the ZIP file
+              zip.file(file.name, dataURL.split("base64,")[1], { base64: true });
+              zipFileCount++;
+
+              // Check if all images have been processed
+              if (zipFileCount === images.length) {
+                // Generate the ZIP file and update the download link
+                zip.generateAsync({ type: "blob" }).then(function (content) {
+                  var downloadLink = document.getElementById("download-link");
+                  downloadLink.href = URL.createObjectURL(content);
+                  downloadLink.style.display = "inline-block"; // Make the download link visible
+                });
+              }
+            };
+            img.src = e.target.result;
+          };
+        })(images[i]);
+        reader.readAsDataURL(images[i]);
+      }
+    }
+
+    // Attach event listeners
+    document.getElementById("image-upload").addEventListener("change", handleImageUpload);
+    document.getElementById("watermark-upload").addEventListener("change", handleWatermarkUpload);
+    document.getElementById("generate-btn").addEventListener("click", generateWatermark);
+  </script>
+</body>
+</html>
